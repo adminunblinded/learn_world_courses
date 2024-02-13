@@ -177,7 +177,7 @@ async function fetchBatchUsers(accessToken, startPage, endPage) {
 }
 
 app.get('/fetch-and-store-users', async (req, res) => {
-  const accessToken = 'NdL2oIEQpnA5HOe6MtvCMLXTvdivcp1bqfbcpCEv';
+  const accessToken = 'rYTDPhEqU7oRvmMzXYxbumYHQnsw9R34F9KJ1aqr';
   const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
