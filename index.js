@@ -32,32 +32,36 @@ const salesforceCredentials = {
 };
 
 
-async function getAccessToken() {
-  try {
-    // Send a POST request to Zapier webhook to trigger fetching the access token
-    await axios.post(zapierWebhookUrl);
+app.post('/receive-access-token', (req, res) => {
+  const { accessToken } = req.body;
+  if (accessToken) {
+    console.log('Received access token:', accessToken);
 
-    // Wait for Zapier to retrieve the access token and send it back
-    const response = await new Promise((resolve, reject) => {
-      setTimeout(() => {
-        reject(new Error('Timeout while waiting for access token'));
-      }, 5000); // Adjust timeout as needed
-
-      app.post('/receive-access-token', (req, res) => {
-        const { accessToken } = req.body;
-        if (accessToken) {
-          resolve(accessToken);
-        } else {
-          reject(new Error('Access token not received'));
-        }
+    // Call the function to fetch and store users with the received access token
+    fetchAndStoreUsers(accessToken)
+      .then(() => {
+        res.sendStatus(200);
+      })
+      .catch(error => {
+        console.error(`Error fetching and storing users: ${error.message}`);
+        res.status(500).json({ error: 'Internal server error' });
       });
-    });
+  } else {
+    res.status(400).json({ error: 'Access token not received' });
+  }
+});
 
-    return response;
+// Trigger the Zapier webhook to fetch the access token
+async function triggerZapierWebhook() {
+  try {
+    await axios.post(zapierWebhookUrl);
+    console.log('Zapier webhook triggered successfully.');
   } catch (error) {
-    throw new Error(`Error retrieving access token: ${error.message}`);
+    console.error(`Error triggering Zapier webhook: ${error.message}`);
   }
 }
+
+triggerZapierWebhook();
 
 async function getAccountId(email, accessToken) {
   try {
@@ -206,8 +210,7 @@ async function fetchBatchUsers(accessToken, startPage, endPage) {
   return batchUsers;
 }
 
-app.get('/fetch-and-store-users', async (req, res) => {
-  const accessToken = await getAccessToken(); // Get the access token dynamically
+async function fetchAndStoreUsers(accessToken){
   const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
