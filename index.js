@@ -306,7 +306,7 @@ async function fetchAndStoreUsers(accessToken){
   } finally {
     await redisQuitAsync();
   }
-});
+};
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
