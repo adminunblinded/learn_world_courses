@@ -16,7 +16,7 @@ const progressApiUrl = 'https://academy.unblindedmastery.com/admin/api/v2/users/
 const userApiUrl = 'https://academy.unblindedmastery.com/admin/api/v2/users/';
 const headers = {
   'Accept': 'application/json',
-  'Authorization': 'Bearer rYTDPhEqU7oRvmMzXYxbumYHQnsw9R34F9KJ1aqr',
+  'Authorization': 'Bearer scWZswO0q1qJXponQL4mmpwshtyrhdLgng48qD8o',
   'Lw-Client': '5e318802ce0e77a1d77ab772',
 };
 const requestsPerSecond = 2;
@@ -177,7 +177,7 @@ async function fetchBatchUsers(accessToken, startPage, endPage) {
 }
 
 app.get('/fetch-and-store-users', async (req, res) => {
-  const accessToken = 'rYTDPhEqU7oRvmMzXYxbumYHQnsw9R34F9KJ1aqr';
+  const accessToken = 'NdL2oIEQpnA5HOe6MtvCMLXTvdivcp1bqfbcpCEv';
   const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
