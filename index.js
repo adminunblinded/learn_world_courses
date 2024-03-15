@@ -14,6 +14,8 @@ const redisQuitAsync = promisify(redisClient.quit).bind(redisClient);
 
 const progressApiUrl = 'https://academy.unblindedmastery.com/admin/api/v2/users/{id}/courses/{cid}/progress';
 const userApiUrl = 'https://academy.unblindedmastery.com/admin/api/v2/users/';
+const zapierWebhookUrl = 'https://hooks.zapier.com/hooks/catch/15640277/3fgumh1/';
+
 const headers = {
   'Accept': 'application/json',
   'Authorization': 'Bearer scWZswO0q1qJXponQL4mmpwshtyrhdLgng48qD8o',
@@ -28,6 +30,34 @@ const salesforceCredentials = {
   username: 'admin@unblindedmastery.com',
   password: 'Unblinded2023$',
 };
+
+
+async function getAccessToken() {
+  try {
+    // Send a POST request to Zapier webhook to trigger fetching the access token
+    await axios.post(zapierWebhookUrl);
+
+    // Wait for Zapier to retrieve the access token and send it back
+    const response = await new Promise((resolve, reject) => {
+      setTimeout(() => {
+        reject(new Error('Timeout while waiting for access token'));
+      }, 5000); // Adjust timeout as needed
+
+      app.post('/receive-access-token', (req, res) => {
+        const { accessToken } = req.body;
+        if (accessToken) {
+          resolve(accessToken);
+        } else {
+          reject(new Error('Access token not received'));
+        }
+      });
+    });
+
+    return response;
+  } catch (error) {
+    throw new Error(`Error retrieving access token: ${error.message}`);
+  }
+}
 
 async function getAccountId(email, accessToken) {
   try {
@@ -177,7 +207,7 @@ async function fetchBatchUsers(accessToken, startPage, endPage) {
 }
 
 app.get('/fetch-and-store-users', async (req, res) => {
-  const accessToken = 'NdL2oIEQpnA5HOe6MtvCMLXTvdivcp1bqfbcpCEv';
+  const accessToken = await getAccessToken(); // Get the access token dynamically
   const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
