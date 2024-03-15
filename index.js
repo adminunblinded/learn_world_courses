@@ -41,7 +41,7 @@ app.post('/receive-access-token', (req, res) => {
     console.log('Received access token:', accessToken);
 
     // Call the function to fetch and store users with the received access token
-    fetchAndStoreUsers(accessToken)
+    fetchAndStoreUsers(accessToken,res)
       .then(() => {
         res.sendStatus(200);
       })
@@ -213,7 +213,7 @@ async function fetchBatchUsers(accessToken, startPage, endPage) {
   return batchUsers;
 }
 
-async function fetchAndStoreUsers(accessToken){
+async function fetchAndStoreUsers(accessToken,res){
   const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
