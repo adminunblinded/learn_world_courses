@@ -28,27 +28,27 @@ const salesforceCredentials = {
   password: 'Unblinded2023$',
 };
 
-app.post('/receive-access-token', receiveAccessToken);
-
-async function receiveAccessToken(req, res) {
+app.post('/receive-access-token', async (req, res) => {
   const { accessToken } = req.body;
-  if (accessToken && !isFetchingAndStoringUsers) {
+  if (accessToken && !isFetchingAndStoringUsers) { // Check if access token is provided and function is not already running
     console.log('Received access token:', accessToken);
-    isFetchingAndStoringUsers = true;
+    isFetchingAndStoringUsers = true; // Set flag to true to prevent subsequent calls
 
     try {
+      // Call the function to fetch and store users with the received access token
       await fetchAndStoreUsers(accessToken, res);
     } catch (error) {
       console.error(`Error fetching and storing users: ${error.message}`);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error' }); // Send error response if an error occurs
     } finally {
-      isFetchingAndStoringUsers = false;
+      isFetchingAndStoringUsers = false; // Reset the flag after the function completes
     }
   } else {
-    res.status(400).json({ error: 'Invalid request' });
+    res.status(400).json({ error: 'Invalid request' }); // Send error response for invalid requests
   }
-}
+});
 
+// Trigger the Zapier webhook to fetch the access token
 async function triggerZapierWebhook() {
   try {
     await axios.post(zapierWebhookUrl);
@@ -58,12 +58,160 @@ async function triggerZapierWebhook() {
   }
 }
 
-async function fetchAndStoreUsers(accessToken, res) {
-  const totalBatches = 1;
+async function getAccountId(email, accessToken) {
+  try {
+    const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT+Id+FROM+Account+WHERE+Email__c='${email}'`;
+    const response = await axios.get(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.data.records.length > 0) {
+      return response.data.records[0].Id;
+    } else {
+      throw new Error('Account not found for the provided email');
+    }
+  } catch (error) {
+    throw new Error(`Error retrieving AccountId: ${error.response ? error.response.data : error.message}`);
+  }
+}
+
+async function getCourseId(courseTitle, accessToken) {
+  try {
+    const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT+Id+FROM+Course__c+WHERE+Name='${courseTitle}'`;
+    const response = await axios.get(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.data.records.length > 0) {
+      return response.data.records[0].Id;
+    } else {
+      throw new Error('Course not found for the provided title');
+    }
+  } catch (error) {
+    throw new Error(`Error retrieving CourseId: ${error.response ? error.response.data : error.message}`);
+  }
+}
+
+async function createSalesforceRecord(email, courseTitle, timeOnCourse) {
+  const url = 'https://login.salesforce.com/services/oauth2/token';
+  const params = new URLSearchParams({
+    grant_type: 'password',
+    client_id: salesforceCredentials.client_id,
+    client_secret: salesforceCredentials.client_secret,
+    username: salesforceCredentials.username,
+    password: salesforceCredentials.password,
+  });
+
+  try {
+    // Get Salesforce access token
+    const response = await axios.post(url, params);
+    const accessToken = response.data.access_token;
+
+    // Get AccountId for the provided email
+    const accountId = await getAccountId(email, accessToken);
+
+    // Get CourseId for the provided courseTitle
+    const courseId = await getCourseId(courseTitle, accessToken);
+
+    // Check if a record with the same AccountId and CourseId exists
+    const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT Id, Course_Time__c FROM Course_Association__c WHERE Account__c = '${accountId}' AND Course__c = '${courseId}'`;
+    const queryResponse = await axios.get(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (queryResponse.data.records.length > 0) {
+      // Record exists, compare Course_Time__c
+      const existingRecord = queryResponse.data.records[0];
+      if (existingRecord.Course_Time__c != timeOnCourse.toFixed(2)) {
+        // Update the existing record
+        const updateRecordUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/sobjects/Course_Association__c/${existingRecord.Id}`;
+        const updateRecordData = {
+          Course_Time__c: timeOnCourse.toFixed(2),
+        };
+        await axios.patch(updateRecordUrl, updateRecordData, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        console.log('Record updated successfully:', existingRecord.Id);
+      } else {
+        // No need to update, Course_Time__c is the same
+        console.log('Record already up-to-date, no changes needed.');
+      }
+    } else {
+      // Record doesn't exist, create a new one
+      const createRecordUrl = 'https://unblindedmastery.my.salesforce.com/services/data/v58.0/sobjects/Course_Association__c/';
+      const recordData = {
+        attributes: {
+          type: 'Course_Association__c',
+        },
+        Account__c: accountId,
+        Course__c: courseId,
+        Course_Time__c: timeOnCourse.toFixed(2),
+      };
+      const createRecordResponse = await axios.post(createRecordUrl, recordData, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('Record created successfully:', createRecordResponse.data);
+    }
+  } catch (error) {
+    console.error('Error creating/updating record:', error.response ? error.response.data : error.message);
+  }
+}
+
+async function getAllUsers(accessToken, pageNumber) {
+  const url = `https://academy.unblindedmastery.com/admin/api/v2/users?page=${pageNumber}`;
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    'Lw-Client': '5e318802ce0e77a1d77ab772',
+  };
+
+  try {
+    const response = await axios.get(url, { headers });
+    return response.data.data || [];
+  } catch (error) {
+    console.error(`Error fetching user data: ${error.message}`);
+    return [];
+  }
+}
+
+async function fetchBatchUsers(accessToken, startPage, endPage) {
+  const batchUsers = [];
+
+  for (let pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
+    const usersData = await getAllUsers(accessToken, pageNumber);
+
+    for (const user of usersData) {
+      const userInfo = { email: user.email };
+      batchUsers.push(userInfo);
+    }
+  }
+
+  return batchUsers;
+}
+
+async function fetchAndStoreUsers(accessToken,res){
+  const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
-  const existingUserEmails = await getUserEmailsFromRedis();
+  const existingUserEmails = await getUserEmailsFromRedis(); // Fetch existing user emails from Redis
   const allUsers = [];
+  
   const headers = {
     'Authorization': `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
@@ -84,9 +232,10 @@ async function fetchAndStoreUsers(accessToken, res) {
 
   for (const user of allUsers) {
     const userEmail = user.email;
+    // Check if the user email already exists in Redis
     if (!existingUserEmails.includes(userEmail)) {
       await redisRpushAsync('user_emails', userEmail);
-      existingUserEmails.push(userEmail);
+      existingUserEmails.push(userEmail); // Update the existing user emails list
     }
   }
 
@@ -94,169 +243,70 @@ async function fetchAndStoreUsers(accessToken, res) {
 
   const userCourseProgress = {};
 
-  const user_emails = await getUserEmailsFromRedis();
-  for (const userEmail of user_emails) {
-    await fetchCourses(userEmail, headers);
-    await new Promise(resolve => setTimeout(resolve, sleepTime));
-  }
-
-  console.log('\nUser Course Progress:');
-  for (const [key, value] of Object.entries(userCourseProgress)) {
-    const [userEmail, courseId] = key.split(':');
-    const { time_on_course, course_title } = value;
-
-    await createSalesforceRecord(userEmail, course_title, time_on_course);
-  }
-
-  await redisQuitAsync();
-}
-
-async function fetchBatchUsers(accessToken, startPage, endPage) {
-  const batchUsers = [];
-
-  for (let pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
-    const usersData = await getAllUsers(accessToken, pageNumber);
-
-    for (const user of usersData) {
-      const userInfo = { email: user.email };
-      batchUsers.push(userInfo);
+  async function getUserEmailsFromRedis() {
+    try {
+      const user_emails = await redisLrangeAsync('user_emails', 0, -1);
+      return user_emails;
+    } catch (error) {
+      console.error(`Error fetching user emails from Redis. Error: ${error.message}`);
+      throw error;
     }
   }
 
-  return batchUsers;
-}
-
-async function getAllUsers(accessToken, pageNumber) {
-  const url = `https://academy.unblindedmastery.com/admin/api/v2/users?page=${pageNumber}`;
-  const headers = {
-    'Authorization': `Bearer ${accessToken}`,
-    'Content-Type': 'application/json',
-    'Lw-Client': '5e318802ce0e77a1d77ab772',
-  };
-
-  try {
-    const response = await axios.get(url, { headers });
-    return response.data.data || [];
-  } catch (error) {
-    console.error(`Error fetching user data: ${error.message}`);
-    return [];
+  async function fetchCourses(userEmail,headers) {
+    const url = `${userApiUrl}${userEmail}/courses`;
+    try {
+      const response = await axios.get(url, { headers });
+      const data = response.data.data || [];
+      const promises = data.map(async (course) => {
+        const courseId = course.course.id;
+        const courseTitle = course.course.title;
+        await fetchAndStoreProgress(userEmail, courseId, courseTitle,headers);
+      });
+      await Promise.all(promises);
+    } catch (error) {
+      console.error(`Failed to fetch courses for user ${userEmail}. Error: ${error.message}`);
+    }
   }
-}
 
-async function getUserEmailsFromRedis() {
-  try {
-    const user_emails = await redisLrangeAsync('user_emails', 0, -1);
-    return user_emails;
-  } catch (error) {
-    console.error(`Error fetching user emails from Redis. Error: ${error.message}`);
-    throw error;
-  }
-}
-
-async function fetchCourses(userEmail, headers) {
-  const url = `${userApiUrl}${userEmail}/courses`;
-  try {
-    const response = await axios.get(url, { headers });
-    const data = response.data.data || [];
-    const promises = data.map(async (course) => {
-      const courseId = course.course.id;
-      const courseTitle = course.course.title;
-      await fetchAndStoreProgress(userEmail, courseId, courseTitle, headers);
-    });
-    await Promise.all(promises);
-  } catch (error) {
-    console.error(`Failed to fetch courses for user ${userEmail}. Error: ${error.message}`);
-  }
-}
-
-async function fetchAndStoreProgress(userEmail, courseId, courseTitle, headers) {
-  const progressUrl = progressApiUrl.replace('{id}', userEmail).replace('{cid}', courseId);
-  try {
-    const response = await axios.get(progressUrl, { headers });
-    if (response.status === 200) {
-      const progressData = response.data;
-      const key = `${userEmail}:${courseId}`;
-      if (!userCourseProgress[key]) {
-        userCourseProgress[key] = { time_on_course: progressData.time_on_course / 60.0, course_title: courseTitle };
+  async function fetchAndStoreProgress(userEmail, courseId, courseTitle,headers) {
+    const progressUrl = progressApiUrl.replace('{id}', userEmail).replace('{cid}', courseId);
+    try {
+      const response = await axios.get(progressUrl, { headers });
+      if (response.status === 200) {
+        const progressData = response.data;
+        const key = `${userEmail}:${courseId}`;
+        if (!userCourseProgress[key]) {
+          userCourseProgress[key] = { time_on_course: progressData.time_on_course / 60.0, course_title: courseTitle };
+        } else {
+          userCourseProgress[key].time_on_course = progressData.time_on_course / 60.0;
+        }
       } else {
-        userCourseProgress[key].time_on_course = progressData.time_on_course / 60.0;
+        console.error(`Failed to fetch progress for user ${userEmail}, course ${courseId}. Status code: ${response.status}`);
       }
-    } else {
-      console.error(`Failed to fetch progress for user ${userEmail}, course ${courseId}. Status code: ${response.status}`);
+    } catch (error) {
+      console.error(`Error fetching progress for user ${userEmail}, course ${courseId}. Error: ${error.message}`);
     }
-  } catch (error) {
-    console.error(`Error fetching progress for user ${userEmail}, course ${courseId}. Error: ${error.message}`);
   }
-}
-
-async function createSalesforceRecord(email, courseTitle, timeOnCourse) {
-  const url = 'https://login.salesforce.com/services/oauth2/token';
-  const params = new URLSearchParams({
-    grant_type: 'password',
-    client_id: salesforceCredentials.client_id,
-    client_secret: salesforceCredentials.client_secret,
-    username: salesforceCredentials.username,
-    password: salesforceCredentials.password,
-  });
 
   try {
-    const response = await axios.post(url, params);
-    const accessToken = response.data.access_token;
-
-    const accountId = await getAccountId(email, accessToken);
-    const courseId = await getCourseId(courseTitle, accessToken);
-
-    const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT Id, Course_Time__c FROM Course_Association__c WHERE Account__c = '${accountId}' AND Course__c = '${courseId}'`;
-    const queryResponse = await axios.get(queryUrl, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
-
-    if (queryResponse.data.records.length > 0) {
-      const existingRecord = queryResponse.data.records[0];
-      if (existingRecord.Course_Time__c != timeOnCourse.toFixed(2)) {
-        const updateRecordUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/sobjects/Course_Association__c/${existingRecord.Id}`;
-        const updateRecordData = { Course_Time__c: timeOnCourse.toFixed(2) };
-        await axios.patch(updateRecordUrl, updateRecordData, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
-        console.log('Record updated successfully:', existingRecord.Id);
-      } else {
-        console.log('Record already up-to-date, no changes needed.');
-      }
-    } else {
-      const createRecordUrl = 'https://unblindedmastery.my.salesforce.com/services/data/v58.0/sobjects/Course_Association__c/';
-      const recordData = { attributes: { type: 'Course_Association__c' }, Account__c: accountId, Course__c: courseId, Course_Time__c: timeOnCourse.toFixed(2) };
-      const createRecordResponse = await axios.post(createRecordUrl, recordData, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
-      console.log('Record created successfully:', createRecordResponse.data);
+    const user_emails = await getUserEmailsFromRedis();
+    for (const userEmail of user_emails) {
+      await fetchCourses(userEmail,headers);
+      await new Promise(resolve => setTimeout(resolve, sleepTime));
     }
-  } catch (error) {
-    console.error('Error creating/updating record:', error.response ? error.response.data : error.message);
-  }
-}
 
-async function getAccountId(email, accessToken) {
-  try {
-    const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT+Id+FROM+Account+WHERE+Email__c='${email}'`;
-    const response = await axios.get(queryUrl, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
-    if (response.data.records.length > 0) {
-      return response.data.records[0].Id;
-    } else {
-      throw new Error('Account not found for the provided email');
-    }
-  } catch (error) {
-    throw new Error(`Error retrieving AccountId: ${error.response ? error.response.data : error.message}`);
-  }
-}
+    console.log('\nUser Course Progress:');
+    for (const [key, value] of Object.entries(userCourseProgress)) {
+      const [userEmail, courseId] = key.split(':');
+      const { time_on_course, course_title } = value;
 
-async function getCourseId(courseTitle, accessToken) {
-  try {
-    const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT+Id+FROM+Course__c+WHERE+Name='${courseTitle}'`;
-    const response = await axios.get(queryUrl, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
-    if (response.data.records.length > 0) {
-      return response.data.records[0].Id;
-    } else {
-      throw new Error('Course not found for the provided title');
+      await createSalesforceRecord(userEmail, course_title, time_on_course);
     }
-  } catch (error) {
-    throw new Error(`Error retrieving CourseId: ${error.response ? error.response.data : error.message}`);
+  } finally {
+    await redisQuitAsync();
   }
-}
+};
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
