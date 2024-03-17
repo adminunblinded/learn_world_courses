@@ -63,8 +63,6 @@ async function triggerZapierWebhook() {
   }
 }
 
-triggerZapierWebhook();
-
 async function getAccountId(email, accessToken) {
   try {
     const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT+Id+FROM+Account+WHERE+Email__c='${email}'`;
@@ -312,4 +310,5 @@ async function fetchAndStoreUsers(accessToken,res){
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  triggerZapierWebhook();
 });
