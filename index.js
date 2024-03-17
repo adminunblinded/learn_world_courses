@@ -28,14 +28,6 @@ const salesforceCredentials = {
   password: 'Unblinded2023$',
 };
 
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer scWZswO0q1qJXponQL4mmpwshtyrhdLgng48qD8o',
-  'Lw-Client': '5e318802ce0e77a1d77ab772',
-};
-
-
 app.post('/receive-access-token', async (req, res) => {
   const { accessToken } = req.body;
   if (accessToken && !isFetchingAndStoringUsers) { // Check if access token is provided and function is not already running
@@ -217,9 +209,14 @@ async function fetchAndStoreUsers(accessToken,res){
   const totalBatches = 1; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
-
   const existingUserEmails = await getUserEmailsFromRedis(); // Fetch existing user emails from Redis
   const allUsers = [];
+  
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    'Lw-Client': '5e318802ce0e77a1d77ab772',
+  };
 
   for (let batchNumber = 1; batchNumber <= totalBatches; batchNumber++) {
     const startPage = (batchNumber - 1) * requestsPerBatch + 1;
@@ -256,7 +253,7 @@ async function fetchAndStoreUsers(accessToken,res){
     }
   }
 
-  async function fetchCourses(userEmail) {
+  async function fetchCourses(userEmail,headers) {
     const url = `${userApiUrl}${userEmail}/courses`;
     try {
       const response = await axios.get(url, { headers });
@@ -264,7 +261,7 @@ async function fetchAndStoreUsers(accessToken,res){
       const promises = data.map(async (course) => {
         const courseId = course.course.id;
         const courseTitle = course.course.title;
-        await fetchAndStoreProgress(userEmail, courseId, courseTitle);
+        await fetchAndStoreProgress(userEmail, courseId, courseTitle,headers);
       });
       await Promise.all(promises);
     } catch (error) {
@@ -272,7 +269,7 @@ async function fetchAndStoreUsers(accessToken,res){
     }
   }
 
-  async function fetchAndStoreProgress(userEmail, courseId, courseTitle) {
+  async function fetchAndStoreProgress(userEmail, courseId, courseTitle,headers) {
     const progressUrl = progressApiUrl.replace('{id}', userEmail).replace('{cid}', courseId);
     try {
       const response = await axios.get(progressUrl, { headers });
@@ -295,7 +292,7 @@ async function fetchAndStoreUsers(accessToken,res){
   try {
     const user_emails = await getUserEmailsFromRedis();
     for (const userEmail of user_emails) {
-      await fetchCourses(userEmail);
+      await fetchCourses(userEmail,headers);
       await new Promise(resolve => setTimeout(resolve, sleepTime));
     }
 
