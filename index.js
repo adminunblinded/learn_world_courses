@@ -35,22 +35,21 @@ const salesforceCredentials = {
 };
 
 
-app.post('/receive-access-token', (req, res) => {
+app.post('/receive-access-token', async (req, res) => {
   const { accessToken } = req.body;
   if (accessToken) {
     console.log('Received access token:', accessToken);
 
-    // Call the function to fetch and store users with the received access token
-    fetchAndStoreUsers(accessToken,res)
-      .then(() => {
-        res.sendStatus(200);
-      })
-      .catch(error => {
-        console.error(`Error fetching and storing users: ${error.message}`);
-        res.status(500).json({ error: 'Internal server error' });
-      });
+    try {
+      // Call the function to fetch and store users with the received access token
+      await fetchAndStoreUsers(accessToken, res);
+      res.sendStatus(200); // Send response only once after the function completes successfully
+    } catch (error) {
+      console.error(`Error fetching and storing users: ${error.message}`);
+      res.status(500).json({ error: 'Internal server error' }); // Send error response if an error occurs
+    }
   } else {
-    res.status(400).json({ error: 'Access token not received' });
+    res.status(400).json({ error: 'Access token not received' }); // Send error response if access token is not provided
   }
 });
 
