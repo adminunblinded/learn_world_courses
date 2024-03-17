@@ -48,15 +48,6 @@ app.post('/receive-access-token', async (req, res) => {
   }
 });
 
-// Trigger the Zapier webhook to fetch the access token
-async function triggerZapierWebhook() {
-  try {
-    await axios.post(zapierWebhookUrl);
-    console.log('Zapier webhook triggered successfully.');
-  } catch (error) {
-    console.error(`Error triggering Zapier webhook: ${error.message}`);
-  }
-}
 
 async function getAccountId(email, accessToken) {
   try {
@@ -310,5 +301,4 @@ async function fetchAndStoreUsers(accessToken,res){
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-  triggerZapierWebhook();
 });
