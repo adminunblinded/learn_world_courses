@@ -18,15 +18,9 @@ const redisQuitAsync = promisify(redisClient.quit).bind(redisClient);
 const progressApiUrl = 'https://academy.unblindedmastery.com/admin/api/v2/users/{id}/courses/{cid}/progress';
 const userApiUrl = 'https://academy.unblindedmastery.com/admin/api/v2/users/';
 const zapierWebhookUrl = 'https://hooks.zapier.com/hooks/catch/15640277/3fgumh1/';
-
-const headers = {
-  'Accept': 'application/json',
-  'Authorization': 'Bearer scWZswO0q1qJXponQL4mmpwshtyrhdLgng48qD8o',
-  'Lw-Client': '5e318802ce0e77a1d77ab772',
-};
 const requestsPerSecond = 2;
 const sleepTime = 1000 / requestsPerSecond;
-
+let isFetchingAndStoringUsers = false;
 const salesforceCredentials = {
   client_id: '3MVG9p1Q1BCe9GmBa.vd3k6U6tisbR1DMPjMzaiBN7xn.uqsguNxOYdop1n5P_GB1yHs3gzBQwezqI6q37bh9',
   client_secret: '1AAD66E5E5BF9A0F6FCAA681ED6720A797AC038BC6483379D55C192C1DC93190',
@@ -35,21 +29,30 @@ const salesforceCredentials = {
 };
 
 
+const headers = {
+  'Accept': 'application/json',
+  'Authorization': 'Bearer scWZswO0q1qJXponQL4mmpwshtyrhdLgng48qD8o',
+  'Lw-Client': '5e318802ce0e77a1d77ab772',
+};
+
+
 app.post('/receive-access-token', async (req, res) => {
   const { accessToken } = req.body;
-  if (accessToken) {
+  if (accessToken && !isFetchingAndStoringUsers) { // Check if access token is provided and function is not already running
     console.log('Received access token:', accessToken);
+    isFetchingAndStoringUsers = true; // Set flag to true to prevent subsequent calls
 
     try {
       // Call the function to fetch and store users with the received access token
       await fetchAndStoreUsers(accessToken, res);
-      res.sendStatus(200); // Send response only once after the function completes successfully
     } catch (error) {
       console.error(`Error fetching and storing users: ${error.message}`);
       res.status(500).json({ error: 'Internal server error' }); // Send error response if an error occurs
+    } finally {
+      isFetchingAndStoringUsers = false; // Reset the flag after the function completes
     }
   } else {
-    res.status(400).json({ error: 'Access token not received' }); // Send error response if access token is not provided
+    res.status(400).json({ error: 'Invalid request' }); // Send error response for invalid requests
   }
 });
 
