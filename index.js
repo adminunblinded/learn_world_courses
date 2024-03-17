@@ -48,7 +48,6 @@ app.post('/receive-access-token', async (req, res) => {
   }
 });
 
-
 async function getAccountId(email, accessToken) {
   try {
     const queryUrl = `https://unblindedmastery.my.salesforce.com/services/data/v58.0/query/?q=SELECT+Id+FROM+Account+WHERE+Email__c='${email}'`;
