@@ -25,7 +25,7 @@ const salesforceCredentials = {
   client_id: '3MVG9p1Q1BCe9GmBa.vd3k6U6tisbR1DMPjMzaiBN7xn.uqsguNxOYdop1n5P_GB1yHs3gzBQwezqI6q37bh9',
   client_secret: '1AAD66E5E5BF9A0F6FCAA681ED6720A797AC038BC6483379D55C192C1DC93190',
   username: 'admin@unblindedmastery.com',
-  password: 'Unblinded2023$',
+  password: 'Unblinded2024$',
 };
 
 app.post('/receive-access-token', async (req, res) => {
@@ -196,7 +196,7 @@ async function fetchBatchUsers(accessToken, startPage, endPage) {
 }
 
 async function fetchAndStoreUsers(accessToken,res){
-  const totalBatches = 1; // 180 requests / 2 requests per second
+  const totalBatches = 120; // 180 requests / 2 requests per second
   const requestsPerBatch = 2;
   const delayBetweenRequests = 1000 / requestsPerBatch;
   const existingUserEmails = await getUserEmailsFromRedis(); // Fetch existing user emails from Redis
